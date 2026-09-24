@@ -8,7 +8,7 @@ Part of [Recharge](https://github.com/SumDumIdiut/recharge): the app pulls this 
 
 A skin folder can also hold optional art for the dash and double-jump indicators floating by the player. The game's own indicator code keeps running (position, bobbing, animation); the skin is just drawn over it.
 
-- `dash.png` - a grid sheet like the player's: **7 columns x 2 rows**, row 1 = the Front glow's 7 animation frames, row 2 = the Back glow's 5 frames (the last two cells are unused). Start from [`templates/dash-template.png`](templates/dash-template.png), which holds the vanilla frames on the magenta guide grid. Any cell size works (the template uses 256px cells for a 64px game sprite). A plain image that isn't on the grid is drawn as a static Front glow, and the Back glow is hidden.
+- `dash.png` - each dash indicator is a dot orbiting the player's head, drawn as 12 sprite frames: the dot passing in front (frames 1-7, arcing left to right) then behind (frames 8-12, right to left). The sheet is a grid of **12 columns x 1 row** on the same magenta guide grid as the player sheet, frames in that order. Start from [`templates/dash-template.png`](templates/dash-template.png), which holds the vanilla frames at their true positions (a 64px game frame at 128px per cell; any cell size works). A plain image that isn't on the grid is drawn as a static dot, and the behind-the-head dot is hidden.
 - `doublejump.png` (or `jump.png`) - a single image, drawn over the double-jump indicator. Start from [`templates/doublejump-template.png`](templates/doublejump-template.png).
 
 Both are scaled to cover the same area as the vanilla sprite, and are never taken as the skin's own player image (which is the first other image in the folder).

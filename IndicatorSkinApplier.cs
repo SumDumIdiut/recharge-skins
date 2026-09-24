@@ -15,14 +15,17 @@ namespace RechargeCustomSkins
     // drawn on an overlay renderer parented to each vanilla one (so it inherits
     // all of that motion), while the vanilla renderer itself is made invisible.
     //
-    // Dash indicators animate through sprite frames (dash_indicator_front_0000..0006
-    // on a "Front" renderer, dash_indicator_back_0000..0004 on a "Back" one), so
-    // dash.png can be a 7x2 grid sheet: row 0 = Front frames, row 1 = Back frames.
-    // A plain (non-grid) dash.png is drawn as a static Front and Back is hidden.
+    // Each dash indicator is a dot orbiting the player's head, drawn as sprite
+    // frames: 7 "Front" frames (dash_indicator_front_0000..0006, the dot passing
+    // in front) then 5 "Back" frames (dash_indicator_back_0000..0004, passing
+    // behind) - 12 frames for one full orbit. dash.png can be a 12x1 grid
+    // sheet of those frames in that order. A plain (non-grid) dash.png is drawn
+    // as a static Front dot and the Back one is hidden.
     internal static class IndicatorSkinApplier
     {
-        private const int DashCols = 7;
-        private const int DashRows = 2;
+        private const int FrontFrames = 7;
+        private const int DashCols = 12;
+        private const int DashRows = 1;
         private static readonly Regex DashSpriteName = new Regex("^dash_indicator_(front|back)_(\\d+)$");
 
         private static readonly FieldInfo DashField =
@@ -178,9 +181,9 @@ namespace RechargeCustomSkins
             {
                 var m = DashSpriteName.Match(vanilla.name);
                 if (!m.Success) return null;
-                int row = m.Groups[1].Value == "front" ? 0 : 1;
                 int frame = int.Parse(m.Groups[2].Value);
-                return frame < DashCols ? CellSprite(art, row, frame, vanilla) : null;
+                int col = m.Groups[1].Value == "front" ? frame : FrontFrames + frame;
+                return col < DashCols ? CellSprite(art, col, vanilla) : null;
             }
 
             if (isDash && t.IsBack) return null;
@@ -188,18 +191,18 @@ namespace RechargeCustomSkins
             return art.Flat;
         }
 
-        private static Sprite CellSprite(Art art, int row, int frame, Sprite vanilla)
+        private static Sprite CellSprite(Art art, int col, Sprite vanilla)
         {
-            if (art.Cells.TryGetValue((row, frame), out var cached)) return cached;
+            if (art.Cells.TryGetValue((0, col), out var cached)) return cached;
 
-            int x = GridSheet.Gutter + frame * (art.CellW + GridSheet.Gutter);
-            int yFromBottom = GridSheet.Gutter + (DashRows - 1 - row) * (art.CellH + GridSheet.Gutter);
+            int x = GridSheet.Gutter + col * (art.CellW + GridSheet.Gutter);
+            int yFromBottom = GridSheet.Gutter;
             var cell = new Texture2D(art.CellW, art.CellH, TextureFormat.RGBA32, false);
             cell.SetPixels(art.Texture.GetPixels(x, yFromBottom, art.CellW, art.CellH));
             cell.Apply();
 
             var sprite = MakeSprite(cell, new Rect(0, 0, art.CellW, art.CellH), art.CellW, vanilla);
-            art.Cells[(row, frame)] = sprite;
+            art.Cells[(0, col)] = sprite;
             return sprite;
         }
 
