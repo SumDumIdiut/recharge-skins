@@ -13,4 +13,4 @@ A skin folder can also hold optional art for the dash and double-jump indicators
 
 Both are scaled to cover the same area as the vanilla sprite, and are never taken as the skin's own player image (which is the first other image in the folder).
 
-`templates/skin-template/` is a ready-made skin folder with the unedited vanilla `dash.png` and `doublejump.png`: copy it, add your player image, and edit the two sheets in place.
+`templates/skin-template/` is a complete, ready-made skin folder holding everything vanilla: `skin-template.png` (the player sheet, all 6 animation rows), `dash.png`, `doublejump.png`, and `sounds/` with the default `BigJump`, `Dash`, `AirJump`, `Death`, `MetalSlide`, `GrassSlide`, `MetalFootstep`, `GrassFootstep`, `MetalLand` and `Tired` sounds. Copy the folder into your skins folder, rename it, and edit whatever you like - anything you leave alone stays vanilla. Sounds with several vanilla variants (jump, footsteps) hold the first variant, and there's no `SmallJump.wav` because the game has no small-jump sound to export.
