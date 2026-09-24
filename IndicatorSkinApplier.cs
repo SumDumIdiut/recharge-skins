@@ -34,8 +34,8 @@ namespace RechargeCustomSkins
         {
             public SpriteRenderer Vanilla;
             public SpriteRenderer Overlay;
-            public Color OriginalColor;
             public bool IsBack;
+            public bool LoggedFirstDraw;
         }
 
         private class Art
@@ -96,7 +96,7 @@ namespace RechargeCustomSkins
                 if (root == null) continue;
                 foreach (var r in root.GetComponentsInChildren<SpriteRenderer>(true))
                 {
-                    targets.Add(new Target { Vanilla = r, OriginalColor = r.color, IsBack = r.name.ToLowerInvariant().Contains("back") });
+                    targets.Add(new Target { Vanilla = r, IsBack = r.name.ToLowerInvariant().Contains("back") });
                 }
             }
             return targets;
@@ -158,8 +158,15 @@ namespace RechargeCustomSkins
             EnsureOverlay(t);
             t.Overlay.sprite = custom;
             t.Overlay.enabled = t.Vanilla.enabled;
-            var c = t.OriginalColor;
-            t.Vanilla.color = new Color(c.r, c.g, c.b, 0f);
+            t.Vanilla.forceRenderingOff = true;
+
+            if (!t.LoggedFirstDraw)
+            {
+                t.LoggedFirstDraw = true;
+                Debug.Log($"[CustomSkins] indicator overlay on '{t.Vanilla.transform.parent?.name}/{t.Vanilla.name}': layer={t.Overlay.gameObject.layer} order={t.Overlay.sortingOrder} " +
+                    $"material={(t.Overlay.sharedMaterial != null ? t.Overlay.sharedMaterial.name : "null")} sprite={custom.rect.width}x{custom.rect.height}@{custom.pixelsPerUnit}ppu " +
+                    $"overlayWorldSize={t.Overlay.bounds.size} vanillaWorldSize={t.Vanilla.bounds.size} lossyScale={t.Vanilla.transform.lossyScale}");
+            }
         }
 
         private static Sprite PickSprite(Art art, Target t, bool isDash)
@@ -200,18 +207,21 @@ namespace RechargeCustomSkins
         private static Sprite MakeSprite(Texture2D tex, Rect rect, int pixelWidth, Sprite vanilla)
         {
             float ppu = pixelWidth * vanilla.pixelsPerUnit / vanilla.rect.width;
-            return Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), ppu);
+            return Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), ppu, 0, SpriteMeshType.FullRect);
         }
 
         private static void EnsureOverlay(Target t)
         {
             if (t.Overlay != null) return;
             var go = new GameObject("CustomSkinIndicator");
+            go.layer = t.Vanilla.gameObject.layer;
             go.transform.SetParent(t.Vanilla.transform, false);
             t.Overlay = go.AddComponent<SpriteRenderer>();
             t.Overlay.sharedMaterial = t.Vanilla.sharedMaterial;
             t.Overlay.sortingLayerID = t.Vanilla.sortingLayerID;
             t.Overlay.sortingOrder = t.Vanilla.sortingOrder + 1;
+            t.Overlay.renderingLayerMask = t.Vanilla.renderingLayerMask;
+            t.Overlay.maskInteraction = t.Vanilla.maskInteraction;
             t.Overlay.flipX = t.Vanilla.flipX;
             t.Overlay.flipY = t.Vanilla.flipY;
         }
@@ -219,15 +229,14 @@ namespace RechargeCustomSkins
         private static void Hide(Target t)
         {
             if (t.Overlay != null) t.Overlay.enabled = false;
-            var c = t.OriginalColor;
-            t.Vanilla.color = new Color(c.r, c.g, c.b, 0f);
+            t.Vanilla.forceRenderingOff = true;
         }
 
         private static void Restore(Target t)
         {
             if (t.Vanilla == null) return;
             if (t.Overlay != null) t.Overlay.enabled = false;
-            if (t.Vanilla.color != t.OriginalColor) t.Vanilla.color = t.OriginalColor;
+            t.Vanilla.forceRenderingOff = false;
         }
     }
 }
