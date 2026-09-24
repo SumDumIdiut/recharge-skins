@@ -87,8 +87,6 @@ namespace RechargeCustomSkins
             });
         }
 
-        private static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg" };
-
         private void LoadSkinsFromDisk()
         {
             _skins.Clear();
@@ -107,7 +105,7 @@ namespace RechargeCustomSkins
             foreach (var folder in folders)
             {
                 var folderName = Path.GetFileName(folder);
-                var imagePath = FindImageFile(folder);
+                var imagePath = SkinFiles.FindPlayerImage(folder);
                 if (imagePath == null)
                 {
                     _host.LogWarning($"[CustomSkins] '{folderName}' has no image file (png/jpg/jpeg) in it - skipping");
@@ -123,12 +121,6 @@ namespace RechargeCustomSkins
                     _host.LogError($"[CustomSkins] couldn't load '{imagePath}': {e}");
                 }
             }
-        }
-
-        private static string FindImageFile(string folder)
-        {
-            return Directory.EnumerateFiles(folder)
-                .FirstOrDefault(f => ImageExtensions.Contains(Path.GetExtension(f), System.StringComparer.OrdinalIgnoreCase));
         }
 
         private string SoundsDir(int index) => Path.Combine(_skinsDir, _skins[index].folderName, "sounds");
@@ -487,6 +479,7 @@ namespace RechargeCustomSkins
                     if (_spriteRenderer.color != tint) _spriteRenderer.color = tint;
                 }
                 CloneSkinApplier.Apply(this, runtime);
+                IndicatorSkinApplier.Apply(_host, Path.Combine(_skinsDir, _skins[_currentIndex].folderName));
 
                 var soundsDir = SoundsDir(_currentIndex);
                 if (_movement != _audioForMovement || _currentIndex != _audioForIndex)
@@ -507,6 +500,7 @@ namespace RechargeCustomSkins
                 if (_spriteRenderer.sharedMaterial != _originalMaterial) _spriteRenderer.material = _originalMaterial;
                 if (_spriteRenderer.color != Color.white) _spriteRenderer.color = Color.white;
                 CloneSkinApplier.RestoreVanilla();
+                IndicatorSkinApplier.RestoreVanilla();
 
                 if (_movement != _audioForMovement || _audioForIndex != -1)
                 {
