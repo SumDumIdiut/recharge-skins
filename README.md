@@ -6,9 +6,9 @@ Part of [Recharge](https://github.com/SumDumIdiut/recharge): the app pulls this 
 
 ## Indicator art
 
-A skin folder can also hold optional images for the dash and double-jump indicators floating by the player:
+A skin folder can also hold optional art for the dash and double-jump indicators floating by the player. The game's own indicator code keeps running (position, bobbing, animation); the skin is just drawn over it.
 
-- `dash.png` - replaces the dash indicators
-- `doublejump.png` (or `jump.png`) - replaces the double-jump indicators
+- `dash.png` - a grid sheet like the player's: **7 columns x 2 rows**, row 1 = the Front glow's 7 animation frames, row 2 = the Back glow's 5 frames (the last two cells are unused). Start from [`templates/dash-template.png`](templates/dash-template.png), which holds the vanilla frames on the magenta guide grid. Any cell size works (the template uses 256px cells for a 64px game sprite). A plain image that isn't on the grid is drawn as a static Front glow, and the Back glow is hidden.
+- `doublejump.png` (or `jump.png`) - a single image, drawn over the double-jump indicator. Start from [`templates/doublejump-template.png`](templates/doublejump-template.png).
 
-They're scaled to the vanilla indicator's size, and never treated as the skin's own player image (which is the first other image in the folder). `Player.log` lists what each indicator is made of (`[CustomSkins] dash[...] renderers`), which helps when tuning the art.
+Both are scaled to cover the same area as the vanilla sprite, and are never taken as the skin's own player image (which is the first other image in the folder).

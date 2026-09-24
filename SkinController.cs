@@ -125,7 +125,6 @@ namespace RechargeCustomSkins
 
         private string SoundsDir(int index) => Path.Combine(_skinsDir, _skins[index].folderName, "sounds");
 
-        private const int Gutter = 2;
         private const float ReferenceCellSize = 256f; // Downloads/Character frames are 256x256
 
         // Sheet classification needs the live grid layout, which is computed
@@ -152,7 +151,7 @@ namespace RechargeCustomSkins
             runtime.Texture = tex;
             runtime.TintColor = ComputeTintColor(tex);
 
-            if (_layoutState == LayoutState.Ready && LooksLikeGrid(tex, _canonicalLayout.Value, out int cellW, out int cellH))
+            if (_layoutState == LayoutState.Ready && GridSheet.LooksLikeGrid(tex, _canonicalLayout.Value.Cols, _canonicalLayout.Value.Rows, out int cellW, out int cellH))
             {
                 var layout = _canonicalLayout.Value;
                 runtime.IsSheet = true;
@@ -173,49 +172,6 @@ namespace RechargeCustomSkins
             return runtime;
         }
 
-        private static readonly Color32 GridLineColor = new Color32(255, 0, 220, 255);
-        private const int GridLineSearchRadius = 3;
-        private const int GridLineColorTolerance = 60;
-
-        // Tolerant of resize/recompress blur - not an exact pixel match.
-        private static bool LooksLikeGrid(Texture2D tex, SkinGridLayout layout, out int cellW, out int cellH)
-        {
-            cellW = (tex.width - Gutter) / layout.Cols - Gutter;
-            cellH = (tex.height - Gutter) / layout.Rows - Gutter;
-            if (cellW <= 0 || cellH <= 0) return false;
-
-            var pixels = tex.GetPixels32();
-            int w = tex.width, h = tex.height;
-            if (!HasGridLineNear(pixels, w, h, 0, 0)) return false;
-            if (!HasGridLineNear(pixels, w, h, 0, h - 1)) return false;
-            if (layout.Cols > 1)
-            {
-                int xDivider = Gutter + cellW;
-                if (xDivider >= w || !HasGridLineNear(pixels, w, h, xDivider, 0)) return false;
-            }
-            return true;
-        }
-
-        private static bool HasGridLineNear(Color32[] pixels, int w, int h, int x, int y)
-        {
-            for (int dy = -GridLineSearchRadius; dy <= GridLineSearchRadius; dy++)
-            {
-                int sy = y + dy;
-                if (sy < 0 || sy >= h) continue;
-                for (int dx = -GridLineSearchRadius; dx <= GridLineSearchRadius; dx++)
-                {
-                    int sx = x + dx;
-                    if (sx < 0 || sx >= w) continue;
-                    if (IsGridLineColor(pixels[sy * w + sx])) return true;
-                }
-            }
-            return false;
-        }
-
-        private static bool IsGridLineColor(Color32 c) =>
-            System.Math.Abs(c.r - GridLineColor.r) + System.Math.Abs(c.g - GridLineColor.g) + System.Math.Abs(c.b - GridLineColor.b) <= GridLineColorTolerance
-            && c.a > 200;
-
         // A skin's average opaque, non-guide-line color - used as a stand-in
         // tint for clips that have no custom row (e.g. Die, which has no
         // source art to build a row from at all). Not exact for a
@@ -228,7 +184,7 @@ namespace RechargeCustomSkins
             foreach (var p in pixels)
             {
                 if (p.a < 200) continue;
-                if (IsGridLineColor(p)) continue;
+                if (GridSheet.IsGridLineColor(p)) continue;
                 r += p.r; g += p.g; b += p.b;
                 count++;
             }
@@ -319,8 +275,8 @@ namespace RechargeCustomSkins
             // output here - fix is to build skins that match this
             // convention, not to keep guessing the template's layout.)
             int rowFromBottom = layout.Rows - 1 - row;
-            int cellOriginX = Gutter + frame * (runtime.CellW + Gutter);
-            int cellOriginY = Gutter + rowFromBottom * (runtime.CellH + Gutter);
+            int cellOriginX = GridSheet.Gutter + frame * (runtime.CellW + GridSheet.Gutter);
+            int cellOriginY = GridSheet.Gutter + rowFromBottom * (runtime.CellH + GridSheet.Gutter);
             var cellColors = runtime.Texture.GetPixels(cellOriginX, cellOriginY, runtime.CellW, runtime.CellH);
 
             float scale = runtime.CellW / ReferenceCellSize;

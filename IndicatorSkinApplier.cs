@@ -1,61 +1,74 @@
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Recharge.ModApi;
 using UnityEngine;
 
 namespace RechargeCustomSkins
 {
-    // Skins the dash / double-jump indicators floating by the player with an
-    // optional dash.png / doublejump.png from the skin folder. The vanilla
-    // indicators are Animator-driven, so - like the player sprite - the
-    // replacement is re-applied every LateUpdate.
+    // Skins the dash / double-jump indicators floating by the player from an
+    // optional dash.png / doublejump.png in the skin folder.
+    //
+    // The vanilla indicator code keeps running untouched - it still positions,
+    // scales, bobs and animates the vanilla renderers. A custom sprite is just
+    // drawn on an overlay renderer parented to each vanilla one (so it inherits
+    // all of that motion), while the vanilla renderer itself is made invisible.
+    //
+    // Dash indicators animate through sprite frames (dash_indicator_front_0000..0006
+    // on a "Front" renderer, dash_indicator_back_0000..0004 on a "Back" one), so
+    // dash.png can be a 7x2 grid sheet: row 0 = Front frames, row 1 = Back frames.
+    // A plain (non-grid) dash.png is drawn as a static Front and Back is hidden.
     internal static class IndicatorSkinApplier
     {
+        private const int DashCols = 7;
+        private const int DashRows = 2;
+        private static readonly Regex DashSpriteName = new Regex("^dash_indicator_(front|back)_(\\d+)$");
+
         private static readonly FieldInfo DashField =
             typeof(PlayerAbilityIndicatorController).GetField("dashIndicators", BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo JumpField =
             typeof(PlayerAbilityIndicatorController).GetField("jumpIndicators", BindingFlags.NonPublic | BindingFlags.Instance);
 
-        private class Slot
+        private class Target
         {
-            public SpriteRenderer[] All;
-            public bool[] WasEnabled;
-            public SpriteRenderer Primary;
-            public float RefWorldWidth;
-            public Sprite LastVanilla;
-            public bool Skinned;
+            public SpriteRenderer Vanilla;
+            public SpriteRenderer Overlay;
+            public Color OriginalColor;
+            public bool IsBack;
         }
 
-        private class CustomArt
+        private class Art
         {
             public Texture2D Texture;
-            public readonly Dictionary<int, Sprite> BySlot = new Dictionary<int, Sprite>();
+            public bool IsSheet;
+            public int CellW, CellH;
+            public Sprite Flat;
+            public readonly Dictionary<(int row, int frame), Sprite> Cells = new Dictionary<(int, int), Sprite>();
         }
 
         private static PlayerAbilityIndicatorController _controller;
-        private static List<Slot> _dash, _jump;
+        private static List<Target> _dash, _jump;
         private static int _nextFindFrame;
 
         private static string _loadedFolder;
-        private static readonly Dictionary<IndicatorKind, CustomArt> Art = new Dictionary<IndicatorKind, CustomArt>();
-        private static readonly HashSet<Sprite> OurSprites = new HashSet<Sprite>();
+        private static Art _dashArt, _jumpArt;
 
         public static void Apply(IRechargeHost host, string skinFolder)
         {
             if (!EnsureController(host)) return;
             if (_loadedFolder != skinFolder) LoadArt(host, skinFolder);
 
-            ApplyKind(_dash, IndicatorKind.Dash);
-            ApplyKind(_jump, IndicatorKind.DoubleJump);
+            foreach (var t in _dash) ApplyTarget(t, _dashArt, isDash: true);
+            foreach (var t in _jump) ApplyTarget(t, _jumpArt, isDash: false);
         }
 
         public static void RestoreVanilla()
         {
             if (_loadedFolder != null) LoadArt(null, null);
-            RestoreSlots(_dash);
-            RestoreSlots(_jump);
+            if (_dash == null) return;
+            foreach (var t in _dash) Restore(t);
+            foreach (var t in _jump) Restore(t);
         }
 
         private static bool EnsureController(IRechargeHost host)
@@ -64,124 +77,157 @@ namespace RechargeCustomSkins
             if (Time.frameCount < _nextFindFrame) return false;
             _nextFindFrame = Time.frameCount + 60;
 
-            _controller = Object.FindFirstObjectByType<PlayerAbilityIndicatorController>();
-            if (_controller == null || DashField == null || JumpField == null) { _controller = null; return false; }
+            var found = Object.FindFirstObjectByType<PlayerAbilityIndicatorController>();
+            if (found == null || DashField == null || JumpField == null) return false;
 
-            _dash = BuildSlots(DashField.GetValue(_controller) as Transform[]);
-            _jump = BuildSlots(JumpField.GetValue(_controller) as Transform[]);
-            host?.Log($"[CustomSkins] indicators found: {_dash.Count} dash, {_jump.Count} double-jump");
-            LogHierarchy(host, "dash", _dash);
-            LogHierarchy(host, "doublejump", _jump);
+            _controller = found;
+            _dash = BuildTargets(DashField.GetValue(found) as Transform[]);
+            _jump = BuildTargets(JumpField.GetValue(found) as Transform[]);
+            host?.Log($"[CustomSkins] indicators found: {_dash.Count} dash renderer(s), {_jump.Count} double-jump renderer(s)");
             return true;
         }
 
-        private static List<Slot> BuildSlots(Transform[] roots)
+        private static List<Target> BuildTargets(Transform[] roots)
         {
-            var slots = new List<Slot>();
-            if (roots == null) return slots;
+            var targets = new List<Target>();
+            if (roots == null) return targets;
             foreach (var root in roots)
             {
                 if (root == null) continue;
-                var all = root.GetComponentsInChildren<SpriteRenderer>(true);
-                slots.Add(new Slot { All = all, WasEnabled = all.Select(r => r.enabled).ToArray() });
+                foreach (var r in root.GetComponentsInChildren<SpriteRenderer>(true))
+                {
+                    targets.Add(new Target { Vanilla = r, OriginalColor = r.color, IsBack = r.name.ToLowerInvariant().Contains("back") });
+                }
             }
-            return slots;
-        }
-
-        private static void LogHierarchy(IRechargeHost host, string label, List<Slot> slots)
-        {
-            if (host == null) return;
-            for (int i = 0; i < slots.Count; i++)
-            {
-                var parts = slots[i].All.Select(r => $"{r.name}({(r.sprite != null ? r.sprite.name + " " + r.sprite.rect.width + "x" + r.sprite.rect.height : "no sprite")})");
-                host.Log($"[CustomSkins] {label}[{i}] renderers: {string.Join(", ", parts)}");
-            }
+            return targets;
         }
 
         private static void LoadArt(IRechargeHost host, string folder)
         {
-            foreach (var art in Art.Values)
-            {
-                foreach (var sprite in art.BySlot.Values) { OurSprites.Remove(sprite); Object.Destroy(sprite); }
-                if (art.Texture != null) Object.Destroy(art.Texture);
-            }
-            Art.Clear();
+            DisposeArt(_dashArt);
+            DisposeArt(_jumpArt);
+            _dashArt = _jumpArt = null;
             _loadedFolder = folder;
             if (folder == null) return;
 
-            foreach (var kind in new[] { IndicatorKind.Dash, IndicatorKind.DoubleJump })
-            {
-                var path = SkinFiles.FindIndicatorImage(folder, kind);
-                if (path == null) continue;
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (!ImageConversion.LoadImage(tex, File.ReadAllBytes(path)))
-                {
-                    host?.LogWarning($"[CustomSkins] couldn't decode indicator image '{path}'");
-                    Object.Destroy(tex);
-                    continue;
-                }
-                Art[kind] = new CustomArt { Texture = tex };
-            }
+            _dashArt = ReadArt(host, SkinFiles.FindIndicatorImage(folder, IndicatorKind.Dash), dash: true);
+            _jumpArt = ReadArt(host, SkinFiles.FindIndicatorImage(folder, IndicatorKind.DoubleJump), dash: false);
         }
 
-        private static void ApplyKind(List<Slot> slots, IndicatorKind kind)
+        private static Art ReadArt(IRechargeHost host, string path, bool dash)
         {
-            if (slots == null) return;
-            if (!Art.TryGetValue(kind, out var art)) { RestoreSlots(slots); return; }
-
-            for (int i = 0; i < slots.Count; i++)
+            if (path == null) return null;
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!ImageConversion.LoadImage(tex, File.ReadAllBytes(path)))
             {
-                var slot = slots[i];
-                Capture(slot);
-                if (slot.Primary == null) continue;
-
-                if (!art.BySlot.TryGetValue(i, out var sprite))
-                {
-                    float ppu = art.Texture.width / slot.RefWorldWidth;
-                    sprite = Sprite.Create(art.Texture, new Rect(0, 0, art.Texture.width, art.Texture.height), new Vector2(0.5f, 0.5f), ppu);
-                    art.BySlot[i] = sprite;
-                    OurSprites.Add(sprite);
-                }
-                slot.Primary.sprite = sprite;
-                foreach (var r in slot.All) if (r != slot.Primary) r.enabled = false;
-                slot.Skinned = true;
+                host?.LogWarning($"[CustomSkins] couldn't decode indicator image '{path}'");
+                Object.Destroy(tex);
+                return null;
             }
+            var art = new Art { Texture = tex };
+            if (dash && GridSheet.LooksLikeGrid(tex, DashCols, DashRows, out int cellW, out int cellH))
+            {
+                art.IsSheet = true;
+                art.CellW = cellW;
+                art.CellH = cellH;
+                host?.Log($"[CustomSkins] '{Path.GetFileName(path)}' recognized as a {DashRows}x{DashCols} indicator sheet (cell {cellW}x{cellH})");
+            }
+            return art;
         }
 
-        // Remembers the animator's own sprite and picks the biggest renderer
-        // as the one that carries the indicator image (others, e.g. glows,
-        // are hidden while a custom image replaces it).
-        private static void Capture(Slot slot)
+        private static void DisposeArt(Art art)
         {
-            if (slot.Primary == null)
-            {
-                SpriteRenderer best = null;
-                float bestArea = 0f;
-                foreach (var r in slot.All)
-                {
-                    if (r == null || r.sprite == null || OurSprites.Contains(r.sprite)) continue;
-                    float area = r.sprite.rect.width * r.sprite.rect.height / (r.sprite.pixelsPerUnit * r.sprite.pixelsPerUnit);
-                    if (area > bestArea) { bestArea = area; best = r; }
-                }
-                if (best == null) return;
-                slot.Primary = best;
-                slot.WasEnabled = slot.All.Select(r => r != null && r.enabled).ToArray();
-                slot.RefWorldWidth = best.sprite.rect.width / best.sprite.pixelsPerUnit;
-            }
-            var current = slot.Primary.sprite;
-            if (current != null && !OurSprites.Contains(current)) slot.LastVanilla = current;
+            if (art == null) return;
+            if (art.Flat != null) Object.Destroy(art.Flat);
+            foreach (var sprite in art.Cells.Values) Object.Destroy(sprite);
+            if (art.Texture != null) Object.Destroy(art.Texture);
         }
 
-        private static void RestoreSlots(List<Slot> slots)
+        private static void ApplyTarget(Target t, Art art, bool isDash)
         {
-            if (slots == null) return;
-            foreach (var slot in slots)
+            if (t.Vanilla == null) return;
+            var custom = art == null ? null : PickSprite(art, t, isDash);
+            if (custom == null)
             {
-                if (!slot.Skinned) continue;
-                if (slot.Primary != null && slot.LastVanilla != null) slot.Primary.sprite = slot.LastVanilla;
-                for (int i = 0; i < slot.All.Length; i++) if (slot.All[i] != null) slot.All[i].enabled = slot.WasEnabled[i];
-                slot.Skinned = false;
+                // A flat dash image has no Back frame: hide that layer entirely.
+                if (isDash && art != null && !art.IsSheet && t.IsBack) Hide(t);
+                else Restore(t);
+                return;
             }
+
+            EnsureOverlay(t);
+            t.Overlay.sprite = custom;
+            t.Overlay.enabled = t.Vanilla.enabled;
+            var c = t.OriginalColor;
+            t.Vanilla.color = new Color(c.r, c.g, c.b, 0f);
+        }
+
+        private static Sprite PickSprite(Art art, Target t, bool isDash)
+        {
+            var vanilla = t.Vanilla.sprite;
+            if (vanilla == null) return null;
+
+            if (art.IsSheet)
+            {
+                var m = DashSpriteName.Match(vanilla.name);
+                if (!m.Success) return null;
+                int row = m.Groups[1].Value == "front" ? 0 : 1;
+                int frame = int.Parse(m.Groups[2].Value);
+                return frame < DashCols ? CellSprite(art, row, frame, vanilla) : null;
+            }
+
+            if (isDash && t.IsBack) return null;
+            if (art.Flat == null) art.Flat = MakeSprite(art.Texture, new Rect(0, 0, art.Texture.width, art.Texture.height), art.Texture.width, vanilla);
+            return art.Flat;
+        }
+
+        private static Sprite CellSprite(Art art, int row, int frame, Sprite vanilla)
+        {
+            if (art.Cells.TryGetValue((row, frame), out var cached)) return cached;
+
+            int x = GridSheet.Gutter + frame * (art.CellW + GridSheet.Gutter);
+            int yFromBottom = GridSheet.Gutter + (DashRows - 1 - row) * (art.CellH + GridSheet.Gutter);
+            var cell = new Texture2D(art.CellW, art.CellH, TextureFormat.RGBA32, false);
+            cell.SetPixels(art.Texture.GetPixels(x, yFromBottom, art.CellW, art.CellH));
+            cell.Apply();
+
+            var sprite = MakeSprite(cell, new Rect(0, 0, art.CellW, art.CellH), art.CellW, vanilla);
+            art.Cells[(row, frame)] = sprite;
+            return sprite;
+        }
+
+        // Sized so it covers exactly the same world area as the vanilla sprite.
+        private static Sprite MakeSprite(Texture2D tex, Rect rect, int pixelWidth, Sprite vanilla)
+        {
+            float ppu = pixelWidth * vanilla.pixelsPerUnit / vanilla.rect.width;
+            return Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), ppu);
+        }
+
+        private static void EnsureOverlay(Target t)
+        {
+            if (t.Overlay != null) return;
+            var go = new GameObject("CustomSkinIndicator");
+            go.transform.SetParent(t.Vanilla.transform, false);
+            t.Overlay = go.AddComponent<SpriteRenderer>();
+            t.Overlay.sharedMaterial = t.Vanilla.sharedMaterial;
+            t.Overlay.sortingLayerID = t.Vanilla.sortingLayerID;
+            t.Overlay.sortingOrder = t.Vanilla.sortingOrder + 1;
+            t.Overlay.flipX = t.Vanilla.flipX;
+            t.Overlay.flipY = t.Vanilla.flipY;
+        }
+
+        private static void Hide(Target t)
+        {
+            if (t.Overlay != null) t.Overlay.enabled = false;
+            var c = t.OriginalColor;
+            t.Vanilla.color = new Color(c.r, c.g, c.b, 0f);
+        }
+
+        private static void Restore(Target t)
+        {
+            if (t.Vanilla == null) return;
+            if (t.Overlay != null) t.Overlay.enabled = false;
+            if (t.Vanilla.color != t.OriginalColor) t.Vanilla.color = t.OriginalColor;
         }
     }
 }
