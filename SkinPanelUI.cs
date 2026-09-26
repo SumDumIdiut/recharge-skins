@@ -70,7 +70,7 @@ namespace RechargeCustomSkins
             Refresh();
         }
 
-        private void OnEnable() => Refresh();
+        private void OnEnable() { if (_controller != null && _pageLabel != null) Refresh(); }
 
         private const float RowSpacing = 38f;
         private const float BoxCenterY = 8f;
