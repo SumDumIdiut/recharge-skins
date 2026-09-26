@@ -28,10 +28,8 @@ namespace RechargeCustomSkins
         private const int DashRows = 1;
         private static readonly Regex DashSpriteName = new Regex("^dash_indicator_(front|back)_(\\d+)$");
 
-        private static readonly FieldInfo DashField =
-            typeof(PlayerAbilityIndicatorController).GetField("dashIndicators", BindingFlags.NonPublic | BindingFlags.Instance);
-        private static readonly FieldInfo JumpField =
-            typeof(PlayerAbilityIndicatorController).GetField("jumpIndicators", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly FieldInfo DashField = Reflect.FieldOf<PlayerAbilityIndicatorController>("dashIndicators");
+        private static readonly FieldInfo JumpField = Reflect.FieldOf<PlayerAbilityIndicatorController>("jumpIndicators");
 
         private class Target
         {
@@ -120,8 +118,15 @@ namespace RechargeCustomSkins
         private static Art ReadArt(IRechargeHost host, string path, bool dash)
         {
             if (path == null) return null;
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(path); }
+            catch (System.Exception e)
+            {
+                host?.LogWarning($"[CustomSkins] couldn't read indicator image '{path}': {e.Message}");
+                return null;
+            }
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (!ImageConversion.LoadImage(tex, File.ReadAllBytes(path)))
+            if (!ImageConversion.LoadImage(tex, bytes))
             {
                 host?.LogWarning($"[CustomSkins] couldn't decode indicator image '{path}'");
                 Object.Destroy(tex);

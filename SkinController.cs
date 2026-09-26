@@ -39,8 +39,6 @@ namespace RechargeCustomSkins
         private float _originalPixelsPerUnit = 100f;
 
         private SkinGridLayout? _canonicalLayout;
-        private readonly HashSet<(int, int)> _loggedCropKeys = new HashSet<(int, int)>();
-        private readonly HashSet<(int, int)> _debugDumpKeys = new HashSet<(int, int)>();
         private Dictionary<Sprite, List<(int row, int frame)>> _vanillaSpriteEntries;
 
         private Movement _audioForMovement;
@@ -87,8 +85,20 @@ namespace RechargeCustomSkins
             });
         }
 
+        // Re-reads the skins folder so a skin dropped in (or downloaded by the
+        // app) while the game is open shows up without a restart. Skins that
+        // are still there keep their decoded textures, and the selected skin
+        // stays selected even if its position in the list moved.
+        public void Rescan()
+        {
+            var current = _currentIndex >= 0 && _currentIndex < _skins.Count ? _skins[_currentIndex].folderName : null;
+            LoadSkinsFromDisk();
+            _currentIndex = current == null ? -1 : _skins.FindIndex(s => s.folderName == current);
+        }
+
         private void LoadSkinsFromDisk()
         {
+            var previous = _skins.ToDictionary(s => s.folderName);
             _skins.Clear();
             IEnumerable<string> folders;
             try
@@ -109,6 +119,11 @@ namespace RechargeCustomSkins
                 if (imagePath == null)
                 {
                     _host.LogWarning($"[CustomSkins] '{folderName}' has no image file (png/jpg/jpeg) in it - skipping");
+                    continue;
+                }
+                if (previous.TryGetValue(folderName, out var existing))
+                {
+                    _skins.Add(existing);
                     continue;
                 }
                 try
@@ -256,14 +271,6 @@ namespace RechargeCustomSkins
             int canvasW = Mathf.Max(1, Mathf.RoundToInt(vanillaSprite.textureRect.width));
             int canvasH = Mathf.Max(1, Mathf.RoundToInt(vanillaSprite.textureRect.height));
 
-            if (_loggedCropKeys.Add(key))
-            {
-                _host.Log($"[CustomSkins] crop diag row={row} frame={frame} vanillaSprite.rect={vanillaSprite.rect} " +
-                    $"textureRect={vanillaSprite.textureRect} textureRectOffset={vanillaSprite.textureRectOffset} " +
-                    $"pivot={vanillaSprite.pivot} pixelsPerUnit={vanillaSprite.pixelsPerUnit} " +
-                    $"cellW={runtime.CellW} cellH={runtime.CellH} canvasW={canvasW} canvasH={canvasH}");
-            }
-
             // A cell holds the FULL, untrimmed sprite bounds (same coordinate
             // space as vanilla's own sprite.rect - a raw 256x256 source frame
             // dropped into a cell unmodified already has its content at the
@@ -296,22 +303,6 @@ namespace RechargeCustomSkins
             var canvas = new Texture2D(canvasW, canvasH, TextureFormat.RGBA32, false);
             canvas.SetPixels32(outPixels);
             canvas.Apply();
-
-            if (_debugDumpKeys.Add(key))
-            {
-                try
-                {
-                    var dumpDir = Path.Combine(_host.ModDataDir(RechargeCustomSkinsMod.ModId), "debug-dump");
-                    Directory.CreateDirectory(dumpDir);
-                    File.WriteAllBytes(Path.Combine(dumpDir, $"cropped_r{row}_f{frame}.png"), canvas.EncodeToPNG());
-                    var fullCellTex = new Texture2D(runtime.CellW, runtime.CellH, TextureFormat.RGBA32, false);
-                    fullCellTex.SetPixels(cellColors);
-                    fullCellTex.Apply();
-                    File.WriteAllBytes(Path.Combine(dumpDir, $"fullcell_r{row}_f{frame}.png"), fullCellTex.EncodeToPNG());
-                    _host.Log($"[CustomSkins] dumped debug PNGs for row={row} frame={frame} to {dumpDir}");
-                }
-                catch (System.Exception e) { _host.LogWarning("[CustomSkins] debug dump failed: " + e); }
-            }
 
             float pivotX = vanillaSprite.pivot.x - vanillaSprite.textureRectOffset.x;
             float pivotY = vanillaSprite.pivot.y - vanillaSprite.textureRectOffset.y;

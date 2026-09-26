@@ -24,16 +24,12 @@ namespace RechargeCustomSkins
             _controller = go.AddComponent<SkinController>();
             _controller.Init(host);
 
-            host.Events.On(RechargeEvents.SceneLoaded, _ =>
-            {
-                var menu = UnityEngine.Object.FindFirstObjectByType<pauseMenuScript>();
-                if (menu != null) InstallMenuRow(menu);
-            });
+            PauseMenuHelper.OnMenuReady(host, InstallMenuRow);
         }
 
         private void InstallMenuRow(pauseMenuScript menu)
         {
-            if (menu.mainBitPublic == null) return;
+            if (PauseMenuHelper.MainBit(menu) == null) return;
             var panel = PauseMenuHelper.AddPanelRow(menu, "CustomSkins", "Skinmod");
             if (panel == null) return;
             if (panel.GetComponent<SkinPanelUI>() != null) return;
