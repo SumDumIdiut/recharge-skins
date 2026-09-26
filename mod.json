@@ -1,7 +1,7 @@
 {
   "id": "recharge.customskins",
   "displayName": "Skinmod",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Recharge",
   "description": "Change how your player looks and sounds. Pick a skin from the pause menu - custom player sprites, dash and double-jump indicators, and sound effects.",
   "entryAssembly": "RechargeCustomSkins.dll",

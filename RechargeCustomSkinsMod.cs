@@ -11,7 +11,7 @@ namespace RechargeCustomSkins
 
         public string Id => ModId;
         public string DisplayName => "Skinmod";
-        public Version Version => new Version(1, 0, 0);
+        public Version Version => new Version(2, 0, 1);
 
         private SkinController _controller;
         private IRechargeHost _host;
