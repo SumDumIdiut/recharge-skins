@@ -268,46 +268,27 @@ namespace RechargeCustomSkins
                 ? layout.RowFrameSprites[row][frame] : null;
             if (vanillaSprite == null) return null;
 
-            int canvasW = Mathf.Max(1, Mathf.RoundToInt(vanillaSprite.textureRect.width));
-            int canvasH = Mathf.Max(1, Mathf.RoundToInt(vanillaSprite.textureRect.height));
-
             // A cell holds the FULL, untrimmed sprite bounds (same coordinate
             // space as vanilla's own sprite.rect - a raw 256x256 source frame
             // dropped into a cell unmodified already has its content at the
-            // right place). Crop to exactly the trimmed sub-region vanilla
-            // itself uses (textureRectOffset/textureRect) so alignment
-            // matches vanilla exactly instead of being guessed. (An earlier
-            // ad-hoc template used its own bottom-anchored+centered
-            // convention instead, which is why it produced blank/jittery
-            // output here - fix is to build skins that match this
-            // convention, not to keep guessing the template's layout.)
+            // right place). The whole cell becomes the sprite, with vanilla's
+            // pivot scaled into it, so alignment matches vanilla exactly and
+            // art outside vanilla's trimmed bounds (hats, capes, ...) is kept
+            // rather than cropped to the original player's silhouette.
             int rowFromBottom = layout.Rows - 1 - row;
             int cellOriginX = GridSheet.Gutter + frame * (runtime.CellW + GridSheet.Gutter);
             int cellOriginY = GridSheet.Gutter + rowFromBottom * (runtime.CellH + GridSheet.Gutter);
-            var cellColors = runtime.Texture.GetPixels(cellOriginX, cellOriginY, runtime.CellW, runtime.CellH);
 
-            float scale = runtime.CellW / ReferenceCellSize;
-            var outPixels = new Color32[canvasW * canvasH];
-            for (int y = 0; y < canvasH; y++)
-            {
-                int srcY = Mathf.RoundToInt((vanillaSprite.textureRectOffset.y + y) * scale);
-                if (srcY < 0 || srcY >= runtime.CellH) continue;
-                int rowBase = srcY * runtime.CellW;
-                for (int x = 0; x < canvasW; x++)
-                {
-                    int srcX = Mathf.RoundToInt((vanillaSprite.textureRectOffset.x + x) * scale);
-                    if (srcX < 0 || srcX >= runtime.CellW) continue;
-                    outPixels[y * canvasW + x] = cellColors[rowBase + srcX];
-                }
-            }
-            var canvas = new Texture2D(canvasW, canvasH, TextureFormat.RGBA32, false);
-            canvas.SetPixels32(outPixels);
+            // Copied into its own texture so bilinear filtering at the cell
+            // edges can't bleed in the magenta guide lines around it.
+            var canvas = new Texture2D(runtime.CellW, runtime.CellH, TextureFormat.RGBA32, false);
+            canvas.SetPixels(runtime.Texture.GetPixels(cellOriginX, cellOriginY, runtime.CellW, runtime.CellH));
             canvas.Apply();
 
-            float pivotX = vanillaSprite.pivot.x - vanillaSprite.textureRectOffset.x;
-            float pivotY = vanillaSprite.pivot.y - vanillaSprite.textureRectOffset.y;
-            var sprite = Sprite.Create(canvas, new Rect(0, 0, canvasW, canvasH),
-                new Vector2(pivotX / canvasW, pivotY / canvasH), vanillaSprite.pixelsPerUnit);
+            float scale = runtime.CellW / ReferenceCellSize;
+            var sprite = Sprite.Create(canvas, new Rect(0, 0, runtime.CellW, runtime.CellH),
+                new Vector2(vanillaSprite.pivot.x * scale / runtime.CellW, vanillaSprite.pivot.y * scale / runtime.CellH),
+                vanillaSprite.pixelsPerUnit * scale, 0, SpriteMeshType.FullRect);
             runtime.Cache[key] = sprite;
             return sprite;
         }
