@@ -29,6 +29,7 @@ namespace RechargeCustomSkins
         private IRechargeHost _host;
         private string _skinsDir;
         private readonly List<(string folderName, byte[] imageBytes, SkinRuntime runtime)> _skins = new List<(string, byte[], SkinRuntime)>();
+        private readonly Dictionary<string, string> _displayNames = new Dictionary<string, string>();
         private int _currentIndex = -1;
 
         private Movement _movement;
@@ -65,7 +66,7 @@ namespace RechargeCustomSkins
             get
             {
                 var names = new List<string> { "Vanilla" };
-                names.AddRange(_skins.Select(s => s.folderName));
+                names.AddRange(_skins.Select(s => DisplayName(s.folderName)));
                 return names;
             }
         }
@@ -100,11 +101,15 @@ namespace RechargeCustomSkins
         {
             var previous = _skins.ToDictionary(s => s.folderName);
             _skins.Clear();
+            _displayNames.Clear();
             IEnumerable<string> folders;
             try
             {
+                foreach (var folder in Directory.EnumerateDirectories(_skinsDir))
+                    _displayNames[Path.GetFileName(folder)] = SkinFiles.ReadDisplayName(folder) ?? Path.GetFileName(folder);
                 folders = Directory.EnumerateDirectories(_skinsDir)
-                    .OrderBy(f => f, System.StringComparer.OrdinalIgnoreCase);
+                    .OrderBy(f => DisplayName(Path.GetFileName(f)), System.StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(f => f, System.StringComparer.OrdinalIgnoreCase);
             }
             catch (System.Exception e)
             {
@@ -137,6 +142,9 @@ namespace RechargeCustomSkins
                 }
             }
         }
+
+        private string DisplayName(string folderName) =>
+            _displayNames.TryGetValue(folderName, out var name) ? name : folderName;
 
         private string SoundsDir(int index) => Path.Combine(_skinsDir, _skins[index].folderName, "sounds");
 

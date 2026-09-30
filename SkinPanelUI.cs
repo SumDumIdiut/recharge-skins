@@ -109,6 +109,7 @@ namespace RechargeCustomSkins
                 var label = row.transform.Find("Text (TMP)")?.GetComponent<TMP_Text>();
                 if (label != null)
                 {
+                    label.richText = false; // skin names are user-chosen; "<" must show as-is
                     label.text = (isCurrent ? "> " : "") + names[displayIndex];
                     label.color = isCurrent ? Green : Color.white;
                 }
